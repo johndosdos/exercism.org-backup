@@ -1,0 +1,34 @@
+name: Auto-merge Exercism PRs
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    # Only run for PRs authored by your GitHub account.
+    # Replace YOUR_GITHUB_USERNAME with your actual username.
+    if: ${{ github.event.pull_request.user.login == 'YOUR_GITHUB_USERNAME' }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Add automerge label
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: automerge
+
+      - name: Wait for checks to finish
+        # optional: small pause so status checks can start
+        run: sleep 10
+
+      - name: Auto merge when ready
+        uses: pascalgn/automerge-action@v0.16.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_LABELS: automerge
+          MERGE_METHOD: squash   # change to merge or rebase if you prefer
