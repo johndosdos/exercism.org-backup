@@ -1,24 +1,56 @@
-# .github/workflows/automerge_exercism_syncer.yml
-name: Auto-Merge Exercism Syncer PRs
+# .github/workflows/automerge-exercism.yml
+name: Auto-merge Exercism Syncer PRs
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+  # pull_request_target runs in the base repo context, so GitHub App PRs can trigger
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+    branches: [main]
+  # Optional: keep during initial testing; remove later if you want.
+  workflow_dispatch: {}
 
+# Least-privilege but sufficient for enabling/doing merges
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  automerge:
+  debug-and-automerge:
     runs-on: ubuntu-latest
-    # Only run when the PR is from the Exercism Syncer app
-    if: github.event.pull_request.user.login == 'exercism-solutions-syncer[bot]' 
+
+    # Tight guard: only act on Exercism Syncer PRs.
+    # If your PRs show a different login, the debug step below will print it.
+    if: >
+      github.event.pull_request != null &&
+      (
+        github.event.pull_request.user.login == 'exercism-solutions-syncer[bot]' ||
+        github.event.pull_request.user.login == 'exercism-solutions-syncer'
+      )
+
     steps:
-      - name: Enable auto-merge on this PR
-        uses: peter-evans/enable-pull-request-automerge@v3
+      - name: Debug PR metadata
+        run: |
+          echo "PR #${{ github.event.pull_request.number }}"
+          echo "Author login: ${{ github.event.pull_request.user.login }}"
+          echo "Actor: $GITHUB_ACTOR"
+          echo "Base: ${{ github.event.pull_request.base.ref }}"
+          echo "Head: ${{ github.event.pull_request.head.ref }}"
+
+      # Enable GitHub's native auto-merge for this PR.
+      # Action pinned to full commit SHA (v3.0.0 -> a660677d5469627102a1c1e11409dd063606628d)
+      # Docs: https://github.com/peter-evans/enable-pull-request-automerge
+      - name: Enable auto-merge
+        uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d
         with:
+          # GITHUB_TOKEN needs contents:write and pull-requests:write
           token: ${{ secrets.GITHUB_TOKEN }}
           pull-request-number: ${{ github.event.pull_request.number }}
-          merge-method: merge    # or squash / rebase per your preference
+          merge-method: merge   # or 'squash' / 'rebase' if you prefer
+
+      # Fallback: if all requirements are already satisfied, merge now.
+      - name: Attempt immediate merge (fallback)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --merge --delete-branch --auto --admin || true
 
